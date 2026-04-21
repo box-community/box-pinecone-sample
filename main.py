@@ -7,7 +7,7 @@ import logging
 from box_integration.box_client import get_client
 import traceback
 
-log_level = getattr(logging, config.LOG_LEVEL.upper(), logging.ERROR)
+log_level = getattr(logging, getattr(config, "LOG_LEVEL", "INFO").upper(), logging.ERROR)
 logging.basicConfig(level=log_level)
 logging.getLogger("box-pinecone-integration")
 
@@ -30,11 +30,20 @@ def main():
     logging.info("Defining Box folder ID")
     folder_id = config.BOX_FOLDER_ID
     
-    # Get all files in the specified folder
-    logging.info("Getting all files in the specified folder")
+    # Get all files in the specified folder (including subfolders)
+    logging.info("Getting all files in the specified folder tree")
     files = get_files_in_folder(box_client, folder_id)
-    
+    if not files:
+        logging.warning(
+            "No supported files found under folder %s. The script only indexes "
+            "certain extensions in that folder tree, or the tree may contain only "
+            "subfolders with no matching documents. Adjust BOX_FOLDER_ID or add files.",
+            folder_id,
+        )
+        return
+
     # Process each file
+    ok = 0
     for file in files:
         try:
             logging.info(f"Processing file: {file.name}")
@@ -59,12 +68,17 @@ def main():
             store_metadata_in_pinecone(pinecone_index, file.id, {"text": combined_text, **metadata}, box_user.id)
             
             logging.info(f"Processed and stored metadata for file: {file.name}")
-        
+            ok += 1
+
         except Exception as e:
             logging.error(f"Failed to process file {file.name}: {e}")
             logging.error(traceback.format_exc())
-    
-    logging.info("Processed and stored metadata for all files in the folder.")
+
+    logging.info(
+        "Finished: successfully stored vectors for %d of %d file(s).",
+        ok,
+        len(files),
+    )
 
 if __name__ == "__main__":
     main()

@@ -17,7 +17,7 @@ You will need accounts for Box, Pinecone, and OpenAI to appropriate run this dem
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/yourusername/box-pinecone-sample.git
+   git clone https://github.com/box-community/box-pinecone-sample.git
    ```
 
    ```bash

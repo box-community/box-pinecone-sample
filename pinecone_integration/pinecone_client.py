@@ -8,7 +8,7 @@ from pinecone import (
 )
 import logging
 
-log_level = getattr(logging, config.LOG_LEVEL.upper(), logging.ERROR)
+log_level = getattr(logging, getattr(config, "LOG_LEVEL", "INFO").upper(), logging.ERROR)
 logging.basicConfig(level=log_level)
 logging.getLogger("pinecone")
 
@@ -127,16 +127,19 @@ def store_metadata_in_pinecone(index, file_id, combined_text, box_user_id, upser
     records = []
     for i, chunk in enumerate(text_chunks):
         logging.debug(f"Processing chunk {i}")
-        # Store the chunk text in metadata
+        # Integrated index uses field_map {"text": "chunk_text"} (see create_index):
+        # Pinecone requires the source field "text" for embedding; "chunk_text" is kept
+        # for search and matches query_utils fields=["chunk_text"].
         minimal_metadata = {
-            "chunk_id": i, 
-            "file_id": file_id, 
-            "file_name": combined_text.get("file_name"), 
-            "created_at": combined_text.get("created_at"), 
-            "modified_at": combined_text.get("modified_at"), 
+            "chunk_id": i,
+            "file_id": file_id,
+            "file_name": combined_text.get("file_name"),
+            "created_at": combined_text.get("created_at"),
+            "modified_at": combined_text.get("modified_at"),
             "size": combined_text.get("size", 0),
             "box_user_id": box_user_id,
-            "chunk_text": chunk  # Store the chunk text as part of the metadata
+            "text": chunk,
+            "chunk_text": chunk,
         }
         if len(records) < upsert_batch_size:
             logging.debug(f"Adding record {file_id}_chunk_{i} to records list")

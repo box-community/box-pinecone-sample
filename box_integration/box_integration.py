@@ -4,7 +4,7 @@ import re
 import logging
 
 # Configure logging
-log_level = getattr(logging, config.LOG_LEVEL.upper(), logging.ERROR)
+log_level = getattr(logging, getattr(config, "LOG_LEVEL", "INFO").upper(), logging.ERROR)
 logging.basicConfig(level=log_level)
 logging.getLogger("box-pinecone-integration")
 
@@ -28,25 +28,41 @@ def is_supported_file_type(file_name):
     logging.debug('Checking if file type is supported for: %s', file_name)
     return any(file_name.endswith(ext) for ext in SUPPORTED_TEXT_FILE_TYPES)
 
-def get_files_in_folder(client, folder_id):
+def get_files_in_folder(client, folder_id, recursive=True):
     """
-    Fetches all files in the specified folder.
+    Fetches files in the specified folder.
+
+    When recursive is True (default), also collects supported files from
+    nested subfolders. Only immediate children are considered when recursive
+    is False.
 
     Parameters:
     - client: The Box client used to interact with the Box service.
     - folder_id: The ID of the folder to fetch files from.
+    - recursive: If True, walk subfolders for supported files.
 
     Returns:
     - A list of file objects.
     """
-    logging.debug('Fetching files in folder with ID: %s', folder_id)
+    logging.debug('Fetching files in folder with ID: %s (recursive=%s)', folder_id, recursive)
     client.user().get(headers={"x-box-ai-library": "pinecone"})
-    folder = client.folder(folder_id).get()
-    items = folder.get_items()
     file_objects = []
-    for item in items:
-        if item.type == 'file' and is_supported_file_type(item.name):
-            file_objects.append(item.get())
+
+    def walk(current_id):
+        folder = client.folder(current_id).get()
+        for item in folder.get_items(use_marker=True):
+            if item.type == 'file' and is_supported_file_type(item.name):
+                file_objects.append(item.get())
+            elif recursive and item.type == 'folder':
+                walk(item.id)
+
+    walk(folder_id)
+    logging.info(
+        'Collected %d supported file(s) under folder %s%s',
+        len(file_objects),
+        folder_id,
+        ' (recursive)' if recursive else '',
+    )
     return file_objects
 
 def clean_up_text(content: str) -> str:
